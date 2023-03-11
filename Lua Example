@@ -1,35 +1,212 @@
-local DISTANCE = 20
-local Players = game:GetService("Players")
-local trainers = script.Parent:GetChildren()
-local event = game:GetService("ReplicatedStorage"):FindFirstChild("Events"):FindFirstChild("TrainerBattle")
+local uis = game:GetService("UserInputService") --getting user input service
+local player = game.Players.LocalPlayer -- the player
+wait()
+local char = player.Character --their character
+local hum = char:WaitForChild("Humanoid")
+local doublejumpenabled = false --some booleans
+local candash = true
+local root = char:WaitForChild("HumanoidRootPart")
+local sprintKey = Enum.KeyCode.LeftControl -- setting sprint key
+local anim = script:WaitForChild("Run") --animation
+local play = hum.Animator:LoadAnimation(anim)
+local dashFoot = "right"
+local canSprint = char:FindFirstChild("CanSprint") -- a variable inside char
 
-local debounceTable = {}
-
-for _, trainer in pairs(trainers) do
-	if trainer:IsA("Model") then
-		coroutine.wrap(function()
-			while wait() do
-				local origin = trainer.HumanoidRootPart.Position
-				local direction = trainer.HumanoidRootPart.CFrame.lookVector * DISTANCE
-				local rayParams = RaycastParams.new()
-
-				local newRay = workspace:Raycast(origin, direction, rayParams)
-
-				if newRay then  
-					for _, player in pairs(Players:GetPlayers()) do -- We're going to loop through all players to see if the npc sees any of them.
-						if player.Character and player.Character:IsAncestorOf(newRay.Instance) then 
-							if player and not debounceTable[player] then
-								if trainer:FindFirstChild("Defeated").Value == "FALSE" then
-									debounceTable[player] = player
-									player.Character.Humanoid.WalkSpeed = 0
-									event:FireClient(player,trainer)
-									break
-								end
-							end
-						end
-					end
-				end 
+hum.StateChanged:Connect(function(oldstate, newstate)
+	if newstate == Enum.HumanoidStateType.Jumping then
+		if not doublejumpenabled then
+			wait(.2)
+			if hum:GetState() == Enum.HumanoidStateType.Freefall then
+				doublejumpenabled = true
 			end
-		end)()
+		end
+	elseif newstate == Enum.HumanoidStateType.Landed then
+		doublejumpenabled = false
 	end
+end)
+
+function Dash(dir)
+	local anim = script.DashAnim
+	game:GetService("ReplicatedStorage").CombatRemote.Dash:FireServer(dir)
+	
+	if dir == "forward" or dir == "left" or dir == "right" then
+		if dashFoot == "right" then
+			anim.AnimationId = "rbxassetid://9424823221"
+			dashFoot = "left"
+		else
+			anim.AnimationId = "rbxassetid://9424829042"
+			dashFoot = "right"
+		end
+	else
+		anim.AnimationId = "rbxassetid://9424839836"
+	end
+	
+	local play = hum.Animator:LoadAnimation(anim)
+	play.Priority = Enum.AnimationPriority.Action
+	play:Play()
+	
+	wait(0.2)
+	
+	local dash = Instance.new("BodyVelocity", root)
+	dash.MaxForce = Vector3.new(25000,25000,25000)
+	if dir == "forward" then
+		dash.Velocity = char.HumanoidRootPart.CFrame.lookVector * 150
+	elseif dir == "backward" then
+		dash.Velocity = char.HumanoidRootPart.CFrame.lookVector * -150
+	elseif dir == "right" then
+		dash.Velocity = char.HumanoidRootPart.CFrame.rightVector * 150
+	elseif dir == "left" then
+		dash.Velocity = char.HumanoidRootPart.CFrame.rightVector * -150
+	end
+	
+	game:GetService("Debris"):AddItem(dash, 0.08)
+	wait(3.0)
+	candash = true
 end
+
+uis.InputBegan:Connect(function(input, isTyping)
+	if isTyping then return end
+	--[[ if input.KeyCode == Enum.KeyCode.Space then (this is double jump that I haven't finished yet)
+		if doublejumpenabled then
+			if hum:GetState() ~= Enum.HumanoidStateType.Jumping then
+				hum.JumpPower = 75
+				hum:ChangeState(Enum.HumanoidStateType.Jumping)
+				coroutine.wrap(function()
+					local effect = game.ReplicatedStorage.Combat.PunchEffect:Clone()
+					effect.Parent = workspace
+					effect.Position = root.Position - Vector3.new(0,3,0)
+					effect.Anchored = true
+					effect.Size = Vector3.new(0.1,0.1,0.1)
+					local t = game:GetService("TweenService")
+					local tween = t:Create(effect, (TweenInfo.new(0.3, Enum.EasingStyle.Sine)), {Size = Vector3.new(9,0.5,9),Transparency = 1})
+					tween:Play()
+					tween.Completed:Wait()
+					effect:Destroy()
+				end)()
+				spawn(function()
+					doublejumpenabled = false
+					hum.JumpPower = 50
+				end)
+			end
+		end
+	end ]]
+	if input.KeyCode == Enum.KeyCode.Q and candash and canSprint.Value == true then --when q is pressed and you can sprint, allowed to dash
+		candash = false
+		
+		if uis:IsKeyDown(Enum.KeyCode.W) then --different directions based on key held
+			Dash("forward")
+		elseif uis:IsKeyDown(Enum.KeyCode.A) then
+			Dash("left")
+		elseif uis:IsKeyDown(Enum.KeyCode.S) then
+			Dash("backward")
+		elseif uis:IsKeyDown(Enum.KeyCode.D) then
+			Dash("right")
+		else
+			Dash("forward")
+		end
+	end
+end)
+
+local isSprinting = false
+
+uis.InputBegan:Connect(function(key, typing) --if you press control you will sprint
+	if typing then return end--ending function if player is typing in chat
+	if char:FindFirstChild("CanSprint").Value == false then return end --ending function if player cant sprint
+	if key.KeyCode == sprintKey then
+		if isSprinting == false then
+			if char:FindFirstChild("isFreezing") then --an instance inside char that determines if they have the freeze status
+				hum.WalkSpeed = 12
+				coroutine.wrap(function()
+					repeat 
+						wait(0.05) 
+					until char:FindFirstChild("isFreezing") == nil
+					hum.WalkSpeed = 28
+				end)()
+			else
+				hum.WalkSpeed = 28
+			end
+			isSprinting = true
+			char:FindFirstChild("IsSprinting").Value = true
+			local playD = false
+			coroutine.wrap(function()
+				while char:FindFirstChild("IsSprinting").Value do
+					if hum.MoveDirection.Magnitude > 0 then	--playing the sprint animation if player is moving
+						if playD == false then
+							play:Play()
+							playD = true
+						end
+					else
+						play:Stop()
+						playD = false
+					end
+					wait(0.01)
+				end
+			end)()
+		else
+			if char:FindFirstChild("isFreezing") then
+				hum.WalkSpeed = 6
+				coroutine.wrap(function()
+					repeat 
+						wait(0.05) 
+					until char:FindFirstChild("isFreezing") == nil
+					hum.WalkSpeed = 16
+				end)()
+			else
+				hum.WalkSpeed = 16
+			end
+			isSprinting = false
+			char:FindFirstChild("IsSprinting").Value = false
+			play:Stop()
+		end
+	end
+end)
+
+canSprint.Changed:Connect(function(val) --if you cant sprint while ctrl was active
+	if val == false then
+		if char:FindFirstChild("isFreezing") then
+			hum.WalkSpeed = 6
+			coroutine.wrap(function()
+				repeat 
+					wait(0.05) 
+				until char:FindFirstChild("isFreezing") == nil
+				hum.WalkSpeed = 16
+			end)()
+		else
+			hum.WalkSpeed = 16
+		end
+		--isSprinting = false
+		char:FindFirstChild("IsSprinting").Value = false
+		play:Stop()
+	else
+		if isSprinting == true then
+			if char:FindFirstChild("isFreezing") then
+				hum.WalkSpeed = 12
+				coroutine.wrap(function()
+					repeat 
+						wait(0.05) 
+					until char:FindFirstChild("isFreezing") == nil
+					hum.WalkSpeed = 28
+				end)()
+			else
+				hum.WalkSpeed = 28
+			end
+			isSprinting = true
+			char:FindFirstChild("IsSprinting").Value = true
+			local playD = false
+			while isSprinting do
+				if canSprint.Value then
+					if hum.MoveDirection.Magnitude > 0 then	
+						if playD == false then
+							play:Play()
+							playD = true
+						end
+					else
+						play:Stop()
+						playD = false
+					end
+				end
+				wait(0.01)
+			end
+		end
+	end
+end)
