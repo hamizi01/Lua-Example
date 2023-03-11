@@ -1,0 +1,35 @@
+local DISTANCE = 20
+local Players = game:GetService("Players")
+local trainers = script.Parent:GetChildren()
+local event = game:GetService("ReplicatedStorage"):FindFirstChild("Events"):FindFirstChild("TrainerBattle")
+
+local debounceTable = {}
+
+for _, trainer in pairs(trainers) do
+	if trainer:IsA("Model") then
+		coroutine.wrap(function()
+			while wait() do
+				local origin = trainer.HumanoidRootPart.Position
+				local direction = trainer.HumanoidRootPart.CFrame.lookVector * DISTANCE
+				local rayParams = RaycastParams.new()
+
+				local newRay = workspace:Raycast(origin, direction, rayParams)
+
+				if newRay then  
+					for _, player in pairs(Players:GetPlayers()) do -- We're going to loop through all players to see if the npc sees any of them.
+						if player.Character and player.Character:IsAncestorOf(newRay.Instance) then 
+							if player and not debounceTable[player] then
+								if trainer:FindFirstChild("Defeated").Value == "FALSE" then
+									debounceTable[player] = player
+									player.Character.Humanoid.WalkSpeed = 0
+									event:FireClient(player,trainer)
+									break
+								end
+							end
+						end
+					end
+				end 
+			end
+		end)()
+	end
+end
